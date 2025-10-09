@@ -1,0 +1,8 @@
+به جای اینکه مقدار رو واچ کنی و اینطوری استفاده کنی، بهتره از دیپندنسی استفاده کنی و مقدار رو از طریق
+values.PersonType
+بگیری. پرفورمنس این مدلی که پیاده کردی خیلی ناپسنده.
+  const watchPersonType = fieldWatch("noneBeneficiaryType");
+  const noneBeneficiaryGender = fieldWatch("noneBeneficiaryGender");
+  const beneficiaryCustomerNumberValue = fieldWatch("beneficiaryCustomerNumber");
+کلا واچ رو سعی کن هیچ‌وقت استفاده نکنی مگر اینکه مجبور باشیم و هیچ‌راهی نداشته باشیم. موارد اینطوری که استفاده کردی رو اکثرن میشه با همین دیپندسی و این‌ها هندل کرد.
+
