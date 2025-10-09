@@ -12,6 +12,16 @@ const DemoAutoFillForm: React.FC = () => {
     id: "auto-fill-dep",
   });
 
+  /**
+   * Defines the form fields for the beneficiary fourth step.
+   *
+   * @remarks
+   * - The `fields` array specifies the configuration for each form field, including label, name, type, and dependencies.
+   * - The `nickname` field includes a `hidden` function that is triggered whenever the `name` field changes, due to its dependency.
+   * - Inside the `hidden` function of the `nickname` field, the value of the `city` field is updated based on the value of the `name` field.
+   * - Specifically, when the `name` field is set to "arash", both the `nickname` and `city` fields are updated programmatically.
+   * - Note: The `hidden` function is used here as a hook for side effects, not for actually hiding the field.
+   */
   const fields: FormFields<SimpleFormType> = [
     {
       label: "City",
@@ -22,7 +32,6 @@ const DemoAutoFillForm: React.FC = () => {
       label: "Name",
       name: "name",
       type: "input",
-      extra: "Type 'arash' to auto-fill nickname",
     },
     {
       label: "Nickname",
@@ -35,11 +44,13 @@ const DemoAutoFillForm: React.FC = () => {
         console.log("🚀 ~ DemoAutoFillForm ~ values:", values);
         const name = values?.name;
         console.log("🚀 ~ DemoAutoFillForm ~ name:", name);
-        const currentCity = values?.city;
-        console.log("🚀 ~ DemoAutoFillForm ~ currentCity:", currentCity);
+        const city = values?.city;
+        console.log("🚀 ~ DemoAutoFillForm ~ city:", city);
+        const nickname = values?.nickname;
+        console.log("🚀 ~ DemoAutoFillForm ~ nickname:", nickname);
 
         if (name === "arash") {
-          setFieldsValue({ nickname: "fada" });
+          setFieldsValue({ nickname: "fada", city: values.name });
         }
 
         return false; // not really hidden, we just hook here
@@ -57,7 +68,7 @@ const DemoAutoFillForm: React.FC = () => {
           city: "TEHRAN",
         }}
         onSubmit={(data) => console.log("Submit:", data)}
-      />{" "}
+      />
     </Container>
   );
 };
@@ -68,4 +79,4 @@ export default DemoAutoFillForm;
 // you will see their values populated in `values`. Otherwise, you will see `undefined` for fields not in dependencies.
 // 🚀 ~ DemoAutoFillForm ~ values: {name: 'arash'}
 // 🚀 ~ DemoAutoFillForm ~ name: arash
-// 🚀 ~ DemoAutoFillForm ~ currentCity: undefined
+// 🚀 ~ DemoAutoFillForm ~ city: undefined
