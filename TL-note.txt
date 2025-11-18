@@ -6,3 +6,8 @@ values.PersonType
   const beneficiaryCustomerNumberValue = fieldWatch("beneficiaryCustomerNumber");
 کلا واچ رو سعی کن هیچ‌وقت استفاده نکنی مگر اینکه مجبور باشیم و هیچ‌راهی نداشته باشیم. موارد اینطوری که استفاده کردی رو اکثرن میشه با همین دیپندسی و این‌ها هندل کرد.
 
+
+
+
+حساب های مرتبط not correct
+نیم‌فاصله correct حساب‌های مرتبط 
