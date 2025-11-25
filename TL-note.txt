@@ -11,3 +11,10 @@ values.PersonType
 نیم فاصله ها با دقت رعایت شود مثال: 
 حساب های مرتبط not correct
 نیم‌فاصله correct حساب‌های مرتبط 
+
+
+if (personType === "REAL" && value.length !== 10) {
+از enum یا
+object as const
+استفاده کن برای مواردی که مقدار ثابت دارن مثل
+real, legal, foreign_real, and...
