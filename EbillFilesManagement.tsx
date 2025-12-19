@@ -38,6 +38,7 @@ import ReceiveAmount from "./modals/receive-amount/receive-amount";
 import SanctionApprove from "./modals/sanction-approve/sanction-approve";
 import Sanction from "./modals/sanction/sanction";
 import EconomyMinistryManagement from "./modals/economy-ministry-management/economy-ministry-management-modal";
+import TransferManagement from "@/pages/ebill-files-management/modals/transfer/transfer-management-modal";
 
 type EbillFilesManagementFormType = {
   billTypeCode: string;
@@ -106,6 +107,7 @@ type EbillFileType = {
     customerIssuanceBack: boolean;
     ministryTax: boolean;
     receiveCash: boolean;
+    discount: boolean;
   };
 };
 
@@ -426,7 +428,7 @@ const EbillFilesManagement: React.FC = () => {
         ]}
         rowActions={[
           {
-            id: "1",
+            id: "viewDetail",
             appearance: {
               icon: <IconsList.EyeIcon />,
               tooltip: messages(generalMessages.actionView),
@@ -450,7 +452,7 @@ const EbillFilesManagement: React.FC = () => {
             },
           },
           {
-            id: "2",
+            id: "edit",
             appearance: {
               icon: <IconsList.EditIcon />,
               tooltip: messages(generalMessages.actionEdit),
@@ -471,30 +473,34 @@ const EbillFilesManagement: React.FC = () => {
                 },
               });
             },
-          },
-          {
-            id: "3",
-            appearance: {
-              icon: <IconsList.DeleteIcon />,
-              tooltip: messages(generalMessages.actionDelete),
-            },
-            action: () => {},
             permissionField(record) {
-              return record.action.delete;
+              return record.action.update;
             },
           },
           {
-            id: "4",
+            id: "proof",
             appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
+              icon: <IconsList.DocumentTopFoldIcon />,
               tooltip: messages(ebillMessages.certificates),
             },
             action: (values) => {
               showAppModal({
                 id: "proofModal",
-                icon: <IconsList.DocumentWithLinesIcon />,
+                icon: <IconsList.DocumentTopFoldIcon />,
                 title: messages(ebillMessages.certificates),
-                element: <ProofManagement {...values} getEbillFiles={mutate} />,
+                element: (
+                  <ProofManagement
+                    getEbillFiles={mutate}
+                    billNumber={values.billNumber}
+                    startDateTime={values.startDateTime}
+                    endDateTime={values.endDateTime}
+                    amount={values.amount}
+                    billTypeCode={values.billTypeCode}
+                    billTypeName={values.billTypeName}
+                    duration={values.duration}
+                    customerNumber={values.customerNumber}
+                  />
+                ),
                 options: { size: "wide", closable: true },
               });
             },
@@ -503,17 +509,29 @@ const EbillFilesManagement: React.FC = () => {
             },
           },
           {
-            id: "5",
+            id: "sanction",
             appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
+              icon: <IconsList.DocumentTopFoldIcon />,
               tooltip: messages(ebillMessages.sanction),
             },
             action: (values) => {
               showAppModal({
                 id: "sanction-barat-file",
-                icon: <IconsList.DocumentWithLinesIcon />,
+                icon: <IconsList.DocumentTopFoldIcon />,
                 title: messages(ebillMessages.sanction),
-                element: <Sanction {...values} mutate={mutate} />,
+                element: (
+                  <Sanction
+                    mutate={mutate}
+                    billNumber={values.billNumber}
+                    startDateTime={values.startDateTime}
+                    endDateTime={values.endDateTime}
+                    amount={values.amount}
+                    billTypeCode={values.billTypeCode}
+                    billTypeName={values.billTypeName}
+                    duration={values.duration}
+                    customerNumber={values.customerNumber}
+                  />
+                ),
                 options: {
                   size: "default",
                   closable: true,
@@ -525,28 +543,29 @@ const EbillFilesManagement: React.FC = () => {
             },
           },
           {
-            id: "6",
+            id: "approve",
             appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
-              tooltip: messages(ebillMessages.transfer),
-            },
-            action: () => {},
-            permissionField(record) {
-              return record.action.transfer;
-            },
-          },
-          {
-            id: "7",
-            appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
+              icon: <IconsList.DocumentTopFoldIcon />,
               tooltip: messages(ebillMessages.approve),
             },
             action: (values) => {
               showAppModal({
                 id: "approve-barat-file",
-                icon: <IconsList.DocumentWithLinesIcon />,
+                icon: <IconsList.DocumentTopFoldIcon />,
                 title: messages(ebillMessages.approve),
-                element: <SanctionApprove {...values} mutate={mutate} />,
+                element: (
+                  <SanctionApprove
+                    mutate={mutate}
+                    billNumber={values.billNumber}
+                    startDateTime={values.startDateTime}
+                    endDateTime={values.endDateTime}
+                    amount={values.amount}
+                    billTypeCode={values.billTypeCode}
+                    billTypeName={values.billTypeName}
+                    duration={values.duration}
+                    customerNumber={values.customerNumber}
+                  />
+                ),
                 options: {
                   size: "wide",
                   closable: true,
@@ -558,17 +577,29 @@ const EbillFilesManagement: React.FC = () => {
             },
           },
           {
-            id: "8",
+            id: "assurance",
             appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
+              icon: <IconsList.DocumentTopFoldIcon />,
               tooltip: messages(ebillMessages.assurance),
             },
             action: (values) => {
               showAppModal({
                 id: "ebill-assurance-modal",
                 title: messages(ebillMessages.assurance),
-                icon: <IconsList.DocumentWithLinesIcon />,
-                element: <EbillAssurancesModal getEbillFiles={mutate} {...values} />,
+                icon: <IconsList.DocumentTopFoldIcon />,
+                element: (
+                  <EbillAssurancesModal
+                    getEbillFiles={mutate}
+                    billNumber={values.billNumber}
+                    startDateTime={values.startDateTime}
+                    endDateTime={values.endDateTime}
+                    amount={values.amount}
+                    billTypeCode={values.billTypeCode}
+                    billTypeName={values.billTypeName}
+                    duration={values.duration}
+                    customerNumber={values.customerNumber}
+                  />
+                ),
                 options: { size: "wide", closable: true },
               });
             },
@@ -577,141 +608,30 @@ const EbillFilesManagement: React.FC = () => {
             },
           },
           {
-            id: "9",
+            id: "centralBank",
             appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
-              tooltip: messages(ebillMessages.economyMinistry),
-            },
-            action: (values) => {
-              showAppModal({
-                id: "economyMinistryModal",
-                icon: <IconsList.DocumentWithLinesIcon />,
-                title: messages(ebillMessages.economyMinistry),
-                element: <EconomyMinistryManagement {...values} />,
-                options: {
-                  size: "wide",
-                  closable: true,
-                },
-              });
-            },
-            permissionField(record) {
-              return record.action.economyMinistry;
-            },
-          },
-          {
-            id: "10",
-            appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
-              tooltip: messages(ebillMessages.ministryTax),
-            },
-            action: () => {},
-            permissionField(record) {
-              return record.action.ministryTax;
-            },
-          },
-          {
-            id: "11",
-            appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
-              tooltip: messages(ebillMessages.bankIssuance),
-            },
-            action: (values) => {
-              showAppModal({
-                id: "bankIssuanceModal",
-                icon: <IconsList.DocumentWithLinesIcon />,
-                title: messages(ebillMessages.bankIssuance),
-                element: (
-                  <BankIssuance
-                    billNumber={values.billNumber}
-                    customerNumber={values.customerNumber}
-                    getEbillFiles={mutate}
-                  />
-                ),
-                options: { size: "small", closable: true },
-              });
-            },
-            permissionField(record) {
-              return record.action.issuance;
-            },
-          },
-          {
-            id: "12",
-            appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
-              tooltip: messages(ebillMessages.commission),
-            },
-            action: (values) => {
-              showAppModal({
-                id: "ebill-commission-modal",
-                icon: <IconsList.DocumentWithLinesIcon />,
-                title: messages(ebillMessages.ebillCommissions),
-                element: <CommissionManagement {...values} />,
-                options: {
-                  size: "wide",
-                  closable: true,
-                },
-              });
-            },
-            permissionField(record) {
-              return record.action.commission;
-            },
-          },
-          {
-            id: "13",
-            appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
-              tooltip: messages(ebillMessages.receivePayment),
-            },
-            action: (values) => {
-              showAppModal({
-                id: "receiveAmountModal",
-                title: messages(ebillMessages.receivePayment),
-                icon: <IconsList.DocumentWithLinesIcon />,
-                element: <ReceiveAmount {...values} mutate={mutate} />,
-                options: {
-                  size: "wide",
-                  closable: true,
-                },
-              });
-            },
-            permissionField(record) {
-              return record.action.receivePayment;
-            },
-          },
-          {
-            id: "14",
-            appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
-              tooltip: messages(ebillMessages.payPayment),
-            },
-            action: () => {},
-            permissionField(record) {
-              return record.action.payPayment;
-            },
-          },
-          {
-            id: "15",
-            appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
-              tooltip: messages(ebillMessages.convertDebt),
-            },
-            action: () => {},
-            permissionField(record) {
-              return record.action.convertDebt;
-            },
-          },
-          {
-            id: "16",
-            appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
+              icon: <IconsList.DocumentTopFoldIcon />,
               tooltip: messages(ebillMessages.centralBankManagement),
             },
             action: (values) => {
               showAppModal({
                 id: "centralBankManagementModal",
-                icon: <IconsList.DocumentWithLinesIcon />,
+                icon: <IconsList.DocumentTopFoldIcon />,
                 title: messages(ebillMessages.centralBankManagement),
-                element: <CentralBankManagement {...values} getEbillFiles={mutate} />,
+                element: (
+                  <CentralBankManagement
+                    getEbillFiles={mutate}
+                    billNumber={values.billNumber}
+                    startDateTime={values.startDateTime}
+                    endDateTime={values.endDateTime}
+                    amount={values.amount}
+                    billTypeCode={values.billTypeCode}
+                    billTypeName={values.billTypeName}
+                    duration={values.duration}
+                    customerNumber={values.customerNumber}
+                    centralBankCode={values.centralBankCode}
+                  />
+                ),
                 options: { closable: true, size: "wide" },
               });
             },
@@ -720,26 +640,15 @@ const EbillFilesManagement: React.FC = () => {
             },
           },
           {
-            id: "17",
+            id: "customerIssuance",
             appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
-              tooltip: messages(ebillMessages.settlement),
-            },
-            action: () => {},
-            permissionField(record) {
-              return record.action.settlement;
-            },
-          },
-          {
-            id: "18",
-            appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
+              icon: <IconsList.DocumentTopFoldIcon />,
               tooltip: messages(ebillMessages.customerIssuance),
             },
             action: (values) => {
               showAppModal({
                 id: "customerIssuanceModal",
-                icon: <IconsList.DocumentWithLinesIcon />,
+                icon: <IconsList.DocumentTopFoldIcon />,
                 title: messages(ebillMessages.customerIssuance),
                 element: (
                   <CustomerIssuance
@@ -756,15 +665,15 @@ const EbillFilesManagement: React.FC = () => {
             },
           },
           {
-            id: "19",
+            id: "customerIssuanceBack",
             appearance: {
-              icon: <IconsList.DocumentWithLinesIcon />,
+              icon: <IconsList.DocumentTopFoldIcon />,
               tooltip: messages(ebillMessages.customerIssuanceBack),
             },
             action: (values) => {
               showAppModal({
                 id: "customerIssuanceBackModal",
-                icon: <IconsList.DocumentWithLinesIcon />,
+                icon: <IconsList.DocumentTopFoldIcon />,
                 title: messages(ebillMessages.customerIssuanceBack),
                 element: (
                   <CustomerIssuanceBack
@@ -778,6 +687,208 @@ const EbillFilesManagement: React.FC = () => {
             },
             permissionField(record) {
               return record.action.customerIssuanceBack;
+            },
+          },
+          {
+            id: "economyMinistry",
+            appearance: {
+              icon: <IconsList.DocumentTopFoldIcon />,
+              tooltip: messages(ebillMessages.economyMinistry),
+            },
+            action: (values) => {
+              showAppModal({
+                id: "economyMinistryModal",
+                icon: <IconsList.DocumentTopFoldIcon />,
+                title: messages(ebillMessages.economyMinistry),
+                element: (
+                  <EconomyMinistryManagement
+                    billNumber={values.billNumber}
+                    startDateTime={values.startDateTime}
+                    endDateTime={values.endDateTime}
+                    amount={values.amount}
+                    billTypeCode={values.billTypeCode}
+                    billTypeName={values.billTypeName}
+                    duration={values.duration}
+                    customerNumber={values.customerNumber}
+                  />
+                ),
+                options: {
+                  size: "wide",
+                  closable: true,
+                },
+              });
+            },
+            permissionField(record) {
+              return record.action.economyMinistry;
+            },
+          },
+          {
+            id: "bankIssuance",
+            appearance: {
+              icon: <IconsList.DocumentTopFoldIcon />,
+              tooltip: messages(ebillMessages.bankIssuance),
+            },
+            action: (values) => {
+              showAppModal({
+                id: "bankIssuanceModal",
+                icon: <IconsList.DocumentTopFoldIcon />,
+                title: messages(ebillMessages.bankIssuance),
+                element: (
+                  <BankIssuance
+                    billNumber={values.billNumber}
+                    customerNumber={values.customerNumber}
+                    getEbillFiles={mutate}
+                  />
+                ),
+                options: { size: "small", closable: true },
+              });
+            },
+            permissionField(record) {
+              return record.action.issuance;
+            },
+          },
+          {
+            id: "commission",
+            appearance: {
+              icon: <IconsList.DocumentTopFoldIcon />,
+              tooltip: messages(ebillMessages.commission),
+            },
+            action: (values) => {
+              showAppModal({
+                id: "ebill-commission-modal",
+                icon: <IconsList.DocumentTopFoldIcon />,
+                title: messages(ebillMessages.ebillCommissions),
+                element: (
+                  <CommissionManagement
+                    billNumber={values.billNumber}
+                    startDateTime={values.startDateTime}
+                    endDateTime={values.endDateTime}
+                    amount={values.amount}
+                    billTypeCode={values.billTypeCode}
+                    billTypeName={values.billTypeName}
+                    duration={values.duration}
+                    customerNumber={values.customerNumber}
+                  />
+                ),
+                options: {
+                  size: "wide",
+                  closable: true,
+                },
+              });
+            },
+            permissionField(record) {
+              return record.action.commission;
+            },
+          },
+          {
+            id: "receivePayment",
+            appearance: {
+              icon: <IconsList.DocumentTopFoldIcon />,
+              tooltip: messages(ebillMessages.receivePayment),
+            },
+            action: (values) => {
+              showAppModal({
+                id: "receiveAmountModal",
+                title: messages(ebillMessages.receivePayment),
+                icon: <IconsList.DocumentTopFoldIcon />,
+                element: (
+                  <ReceiveAmount
+                    mutate={mutate}
+                    billNumber={values.billNumber}
+                    startDateTime={values.startDateTime}
+                    endDateTime={values.endDateTime}
+                    amount={values.amount}
+                    billTypeCode={values.billTypeCode}
+                    billTypeName={values.billTypeName}
+                    duration={values.duration}
+                    customerNumber={values.customerNumber}
+                  />
+                ),
+                options: {
+                  size: "wide",
+                  closable: true,
+                },
+              });
+            },
+            permissionField(record) {
+              return record.action.receivePayment;
+            },
+          },
+          {
+            id: "discount",
+            appearance: {
+              icon: <IconsList.DocumentTopFoldIcon />,
+              tooltip: messages(ebillMessages.discount),
+            },
+            action: () => {},
+            permissionField(record) {
+              return record.action.discount;
+            },
+          },
+          {
+            id: "transfer",
+            appearance: {
+              icon: <IconsList.DocumentTopFoldIcon />,
+              tooltip: messages(ebillMessages.transfer),
+            },
+            action: (values) => {
+              showAppModal({
+                id: "transfer-management-file",
+                icon: <IconsList.DocumentTopFoldIcon />,
+                title: messages(ebillMessages.ebillTransfer),
+                element: (
+                  <TransferManagement
+                    billNumber={values.billNumber}
+                    startDateTime={values.startDateTime}
+                    endDateTime={values.endDateTime}
+                    amount={values.amount}
+                    billTypeCode={values.billTypeCode}
+                    billTypeName={values.billTypeName}
+                    duration={values.duration}
+                    customerNumber={values.customerNumber}
+                  />
+                ),
+                options: {
+                  size: "default",
+                  closable: true,
+                },
+              });
+            },
+            permissionField(record) {
+              return record.action.transfer;
+            },
+          },
+          {
+            id: "payPayment",
+            appearance: {
+              icon: <IconsList.DocumentTopFoldIcon />,
+              tooltip: messages(ebillMessages.payPayment),
+            },
+            action: () => {},
+            permissionField(record) {
+              return record.action.payPayment;
+            },
+          },
+          {
+            id: "convertDebt",
+            appearance: {
+              icon: <IconsList.DocumentTopFoldIcon />,
+              tooltip: messages(ebillMessages.convertDebt),
+            },
+            action: () => {},
+            permissionField(record) {
+              return record.action.convertDebt;
+            },
+          },
+          {
+            id: "settlement",
+            appearance: {
+              icon: <IconsList.DocumentTopFoldIcon />,
+              tooltip: messages(ebillMessages.settlement),
+            },
+            action: () => {},
+            permissionField(record) {
+              return record.action.settlement;
             },
           },
         ]}
