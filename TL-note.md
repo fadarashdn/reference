@@ -1,23 +1,229 @@
-به جای اینکه مقدار رو واچ کنی و اینطوری استفاده کنی، بهتره از دیپندنسی استفاده کنی و مقدار رو از طریق
-values.PersonType
-بگیری. پرفورمنس این مدلی که پیاده کردی خیلی ناپسنده.
-  const watchPersonType = fieldWatch("noneBeneficiaryType");
-  const noneBeneficiaryGender = fieldWatch("noneBeneficiaryGender");
-  const beneficiaryCustomerNumberValue = fieldWatch("beneficiaryCustomerNumber");
-کلا واچ رو سعی کن هیچ‌وقت استفاده نکنی مگر اینکه مجبور باشیم و هیچ‌راهی نداشته باشیم. موارد اینطوری که استفاده کردی رو اکثرن میشه با همین دیپندسی و این‌ها هندل کرد.
+# 📝 Form Best Practices - 3 Critical Rules
 
+## 1️⃣ ❌ Don't Use fieldWatch - Use Dependencies Instead
 
+### Performance Problem:
+```typescript
+// ❌ WRONG - Bad Performance
+const watchPersonType = fieldWatch("noneBeneficiaryType");
+const noneBeneficiaryGender = fieldWatch("noneBeneficiaryGender");
+const beneficiaryCustomerNumberValue = fieldWatch("beneficiaryCustomerNumber");
 
-نیم فاصله ها با دقت رعایت شود مثال: 
-حساب های مرتبط not correct
-نیم‌فاصله correct حساب‌های مرتبط 
+{
+  name: "someField",
+  type: "input",
+  disabled: watchPersonType === "REAL", // ❌ Extra re-renders
+}
+```
 
+### ✅ Correct Solution - Use Dependencies:
+```typescript
+// ✅ CORRECT - Good Performance
+{
+  name: "someField",
+  type: "input",
+  dependencies: ["noneBeneficiaryType"],
+  disabled: ({ values }) => values.noneBeneficiaryType === "REAL",
+}
 
+// ✅ Multiple dependencies
+{
+  name: "anotherField",
+  type: "input",
+  dependencies: ["noneBeneficiaryType", "noneBeneficiaryGender"],
+  hidden: ({ values }) => {
+    return values.noneBeneficiaryType === "REAL" && 
+           values.noneBeneficiaryGender === "MALE";
+  },
+}
+```
+
+### When to Use fieldWatch:
+```typescript
+// ✅ OK: Only when you MUST use it outside field config
+const CustomerInfo = () => {
+  const { fieldWatch, setFieldsValue } = useControlledForm();
+  
+  // Use case: Complex logic that affects multiple fields
+  const customerType = fieldWatch("customerType");
+  
+  useEffect(() => {
+    if (customerType === "LEGAL") {
+      setFieldsValue({
+        field1: "value1",
+        field2: "value2",
+        field3: "value3",
+      });
+    }
+  }, [customerType]);
+};
+```
+
+**Rule:** Use `dependencies` + `disabled/hidden` callbacks in 95% of cases. Only use `fieldWatch` when absolutely necessary.
+
+---
+
+## 2️⃣ Persian Typography - Half-Space (نیم‌فاصله)
+
+### Rules:
+```typescript
+// ❌ WRONG
+"حساب های مرتبط"        // Space
+"برنامه ها"              // Space
+"داده های ورودی"         // Space
+
+// ✅ CORRECT
+"حساب‌های مرتبط"         // Half-space (‌)
+"برنامه‌ها"              // Half-space (‌)
+"داده‌های ورودی"         // Half-space (‌)
+```
+
+### How to Type Half-Space:
+- **Windows:** `Shift + Space`
+- **VS Code:** Type regular space, then autocorrect (if extension installed)
+
+### Common Patterns:
+```typescript
+// Plural suffix
+"حساب‌ها"    "پرونده‌ها"    "کارت‌های بانکی"
+
+// Possessive
+"اطلاعات کاربر"  →  "اطلاعات‌ کاربر"  ❌
+"اطلاعات کاربر"  →  "اطلاعات کاربر"   ✅ (no half-space needed)
+
+// With "های"
+"داده های سیستم"  →  "داده‌های سیستم"  ✅
+```
+
+### In Code:
+```typescript
+// ✅ All Persian text in messages must use half-space correctly
+const messages = defineMessages({
+  relatedAccounts: {
+    id: "app.relatedAccounts",
+    defaultMessage: "حساب‌های مرتبط",  // ✅ Half-space
+  },
+  userPrograms: {
+    id: "app.userPrograms", 
+    defaultMessage: "برنامه‌های کاربر",  // ✅ Half-space
+  },
+});
+```
+
+---
+
+## 3️⃣ Use Constants for Fixed Values - No String Literals
+
+### ❌ Problem:
+```typescript
+// ❌ WRONG - Magic strings
 if (personType === "REAL" && value.length !== 10) {
-از enum یا
-object as const
-استفاده کن برای مواردی که مقدار ثابت دارن مثل
-real, legal, foreign_real, and...
+  return Promise.reject("error");
+}
+
+if (status === "APPROVED") { ... }
+if (type === "LEGAL") { ... }
+```
+
+### ✅ Solution - Use `const` or `enum`:
+
+```typescript
+// ✅ Option 1: Object as const (Preferred)
+const PersonType = {
+  REAL: "REAL",
+  LEGAL: "LEGAL", 
+  FOREIGN_REAL: "FOREIGN_REAL",
+  FOREIGN_LEGAL: "FOREIGN_LEGAL",
+} as const;
+
+type PersonTypeValue = typeof PersonType[keyof typeof PersonType];
+
+// ✅ Usage
+if (personType === PersonType.REAL && value.length !== 10) {
+  return Promise.reject("error");
+}
+
+// ✅ Option 2: Type union (for types only)
+type PersonType = "REAL" | "LEGAL" | "FOREIGN_REAL" | "FOREIGN_LEGAL";
+
+// ✅ Option 3: Enum (less preferred)
+enum PersonType {
+  REAL = "REAL",
+  LEGAL = "LEGAL",
+  FOREIGN_REAL = "FOREIGN_REAL",
+}
+```
+
+### Real Example:
+```typescript
+// ✅ Define constants
+const BillStatus = {
+  CREATED: "ELECTRONIC_BILL_CREATED",
+  ISSUED: "ELECTRONIC_BILL_ISSUED",
+  APPROVED: "ELECTRONIC_BILL_APPROVED",
+  PAID: "ELECTRONIC_BILL_PAYED",
+  DELETED: "ELECTRONIC_BILL_DELETED",
+} as const;
+
+const CustomerType = {
+  BANK: "BANK_CUSTOMER",
+  OTHER: "OTHER_BANK_CUSTOMER",
+} as const;
+
+// ✅ Use in code
+{
+  name: "isBankCustomer",
+  type: "select",
+  data: {
+    static: [
+      { value: CustomerType.BANK, label: "مشتری بانک" },
+      { value: CustomerType.OTHER, label: "مشتری سایر بانک‌ها" },
+    ],
+  },
+}
+
+// ✅ Use in validation
+validation: {
+  rules: [{
+    validator: (_, value) => {
+      if (personType === PersonType.REAL && value.length !== 10) {
+        return Promise.reject("کد ملی باید ۱۰ رقم باشد");
+      }
+      if (personType === PersonType.LEGAL && value.length !== 11) {
+        return Promise.reject("شناسه ملی باید ۱۱ رقم باشد");
+      }
+      return Promise.resolve();
+    },
+  }],
+}
+```
+
+### Benefits:
+- ✅ Autocomplete support
+- ✅ Type safety
+- ✅ Easy refactoring
+- ✅ Catch typos at compile time
+- ✅ Single source of truth
+
+---
+
+## Quick Summary:
+
+| Rule | ❌ Wrong | ✅ Correct |
+|------|---------|-----------|
+| **Performance** | `fieldWatch` everywhere | `dependencies` + callbacks |
+| **Typography** | `حساب های` (space) | `حساب‌های` (half-space) |
+| **Constants** | `"REAL"` magic strings | `PersonType.REAL` |
+
+---
+
+## Checklist Before Commit:
+
+- [ ] No `fieldWatch` in field config (use `dependencies` instead)
+- [ ] All Persian text has correct half-spaces (‌)
+- [ ] No magic strings (use `const` objects)
+- [ ] Constants defined at top of file or in separate constants file
+
 
 
 
