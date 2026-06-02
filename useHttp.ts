@@ -1,4 +1,6 @@
-import { isFunction } from "@brdp/utils";
+/* eslint-disable @tanstack/query/no-rest-destructuring */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { isFunction, systemLog } from "@brdp/utils";
 import {
   keepPreviousData,
   useMutation,
@@ -6,14 +8,14 @@ import {
   useQueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
-import { queryClient } from "../configs/react-query";
+import { useEffect, useEffectEvent, useMemo } from "react";
 import { http } from "./http/http";
 import { URLsType } from "./http/url";
+import { useLongRequestNotifier } from "./useLongRequestNotifier";
 
-export type APIResponseType<Result = unknown> = {
+type SuccessResponse<Result> = {
+  isSuccess: true;
   errorList: null;
-  isSuccess: boolean;
   message: string | null;
   resultData: Result;
   rsCode: string;
@@ -22,7 +24,7 @@ export type APIResponseType<Result = unknown> = {
 export type RequestError = {
   rsCode: string;
   message: string;
-  resultData: null;
+  resultData: never;
   isSuccess: false;
   errorList:
     | {
@@ -36,7 +38,17 @@ export type RequestError = {
     | string[];
 };
 
-type GetFetcherType = {
+export type APIResponseType<Result = unknown> =
+  | SuccessResponse<Result>
+  | RequestError;
+
+type LongRequestOptions = {
+  notifyOnLongRequest?: boolean;
+  longRequestThreshold?: number;
+  longRequestMessage?: string;
+};
+
+type GetFetcherType<TQueryFnData = unknown, TData = TQueryFnData> = {
   /**
    * will throw the request error to the function call,
    * by default we will handle the errors on http module.
@@ -49,7 +61,7 @@ type GetFetcherType = {
   silent?: boolean;
   /**
    * in this the request won't fire automatically, and waits
-   * for the trigger.
+   * for the trigger (`mutate()` should be called manually).
    */
   enable?: boolean;
   /**
@@ -62,61 +74,140 @@ type GetFetcherType = {
    * for certain requests.
    */
   cache?: boolean;
-};
+  /**
+   * Transform the data from the query function before it is returned.
+   */
+  select?: (data: TQueryFnData) => TData;
+} & LongRequestOptions;
 
 type WithFileUpload = {
   withFileUpload?: boolean;
 };
 
-type PostOptionsType = Omit<GetFetcherType, "enable"> & WithFileUpload;
+export type MutationCallbacks<TData = unknown, TError = unknown, TVariables = unknown> = {
+  onSuccess?: (data: TData, variables: TVariables) => Promise<unknown> | void;
+  onError?: (error: TError, variables: TVariables) => Promise<unknown> | void;
+  onSettled?: (
+    data: TData | undefined,
+    error: TError | null,
+    variables: TVariables,
+  ) => Promise<unknown> | void;
+};
 
-type PutOptionsType = Omit<GetFetcherType, "enable"> & WithFileUpload;
+type BaseMutationOptions<TData = unknown, TError = unknown, TVariables = unknown> = Omit<
+  GetFetcherType,
+  "enable" | "select" | "hasPagination" | "cache"
+> &
+  WithFileUpload &
+  LongRequestOptions &
+  MutationCallbacks<TData, TError, TVariables> & {
+    /**
+     * List of query keys to refetch after mutation is successful
+     */
+    refetch?: string[];
+  };
 
-type PatchOptionsType = Omit<GetFetcherType, "enable"> & WithFileUpload;
+type PostOptionsType<
+  TData = unknown,
+  TError = unknown,
+  TVariables = unknown,
+> = BaseMutationOptions<TData, TError, TVariables>;
 
-export const useGet = <Response = unknown, Error = RequestError>(
+type PutOptionsType<
+  TData = unknown,
+  TError = unknown,
+  TVariables = unknown,
+> = BaseMutationOptions<TData, TError, TVariables>;
+
+type PatchOptionsType<
+  TData = unknown,
+  TError = unknown,
+  TVariables = unknown,
+> = BaseMutationOptions<TData, TError, TVariables>;
+
+type DeleteOptionsType<
+  TData = unknown,
+  TError = unknown,
+  TVariables = unknown,
+> = BaseMutationOptions<TData, TError, TVariables>;
+
+type GetFileOptionsType = {
+  enable?: boolean;
+} & LongRequestOptions;
+
+export const useGet = <
+  Response = unknown,
+  TData = APIResponseType<Response>,
+  Error = RequestError,
+>(
   key: QueryKey,
   url: URLsType,
-  options?: GetFetcherType,
+  options?: GetFetcherType<APIResponseType<Response>, TData>,
 ) => {
-  const _key: QueryKey = useMemo(() => [...key, url], [key, url]);
+  const _url = isFunction(url) ? url({}) : url;
+  const _key: QueryKey = useMemo(() => [...key, _url], [key, _url]);
   const queryClient = useQueryClient();
+  const { enable, hasPagination, select, cache, ...otherOptions } = options ?? {};
+
+  const logger = useEffectEvent(() => {
+    if (process.env.NODE_ENV === "development") {
+      if (!cache) {
+        systemLog.log(
+          `%c[Cleanup] Removing query: ${_key}`,
+          "color: purple; font-weight: bold",
+        );
+      }
+
+      queryClient.removeQueries({ queryKey: _key });
+    }
+  });
 
   useEffect(() => {
     return () => {
-      if (!options?.cache) {
-        console.log(
-          `%c[${new Date().toLocaleTimeString()}] useGet unmounted. Removing query from cache: ${_key}`,
-          "color: purple",
-        );
-
-        queryClient.removeQueries({ queryKey: _key });
-      }
+      logger();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { refetch, data, ...query } = useQuery<APIResponseType<Response>, Error>({
+  /**
+   * useQuery Generics Order:
+   * 1. TQueryFnData (What fetcher returns)
+   * 2. TError (Error type)
+   * 3. TData (What hook returns - result of select)
+   * 4. TQueryKey (Key type)
+   */
+  const { refetch, data, ...query } = useQuery<APIResponseType<Response>, Error, TData>({
     queryKey: _key,
     queryFn: async ({ signal }) => {
       try {
-        const res = await http.get<APIResponseType<Response>>(url, {
-          ...options,
+        const res = await http.get<APIResponseType<Response>>(_url, {
+          ...otherOptions,
           signal,
         });
         return res.data;
       } catch (error) {
         if (error instanceof Error) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          throw (error as any).response?.data;
+          throw (error as any).response?.data || error;
         }
 
         throw error;
       }
     },
-    enabled: (options && options.enable) === false ? false : true,
-    // select: (data) => data,
-    placeholderData: options?.hasPagination ? keepPreviousData : undefined,
+    enabled: enable !== false,
+    placeholderData: hasPagination ? keepPreviousData : undefined,
+    select: select,
+    staleTime: cache ? Infinity : 0,
+    // behavior: () => {},
+    // initialData: [],
+    // meta: {},
+    // retry: (failureCount: number, error: TError) => boolean,
+  });
+
+  useLongRequestNotifier({
+    key: _key,
+    isPending: query.isFetching,
+    enable: options?.notifyOnLongRequest,
+    threshold: options?.longRequestThreshold,
+    message: options?.longRequestMessage,
   });
 
   const mutate = () => {
@@ -125,20 +216,23 @@ export const useGet = <Response = unknown, Error = RequestError>(
 
   const cancel = async () => {
     return await queryClient.cancelQueries({
-      queryKey: [...key],
+      queryKey: key,
     });
   };
 
   const reset = () => {
-    const baseUrl = url.split('?')[0];
+    const baseUrl = _url.split("?")[0];
 
-    queryClient.setQueriesData<null>({
-      predicate: (query) => {
-        return JSON.stringify(query.queryKey).includes(baseUrl);
+    queryClient.setQueriesData<null>(
+      {
+        predicate: (query) => {
+          return JSON.stringify(query.queryKey).includes(baseUrl);
+        },
+        exact: false,
+        type: "all",
       },
-      exact: false,
-      type: 'all',
-    }, () => null);
+      () => null,
+    );
   };
 
   return { ...query, data, mutate, cancel, reset };
@@ -148,40 +242,50 @@ export const usePost = <
   Response = unknown,
   Data = unknown,
   Error = RequestError,
-  URLType = ((params: Data) => string) | URLsType,
+  URLType = URLsType,
 >(
   url: URLType,
-  options?: PostOptionsType,
+  options?: PostOptionsType<APIResponseType<Response>, Error, Data>,
 ) => {
+  const _url = isFunction(url) ? url() : url;
+  const _key: QueryKey = useMemo(() => [_url], [_url]);
+  const queryClient = useQueryClient();
+  const { withFileUpload, onSuccess, onError, onSettled, ...otherOptions } =
+    options ?? {};
+
   const {
     mutateAsync: qMutate,
-    reset,
     isPending,
     ...query
   } = useMutation<APIResponseType<Response>, Error, Data>({
-    mutationKey: [url],
+    mutationKey: _key,
+    onSuccess: async (data, variables) => {
+      if (isFunction(onSuccess)) {
+        await onSuccess(data, variables);
+      }
+
+      if (options?.refetch) {
+        await queryClient.refetchQueries({
+          predicate: (query) => !!options.refetch?.includes(String(query.queryKey[0])),
+        });
+      }
+    },
+    onError,
+    onSettled,
+    meta: {
+      invalidateQueryKey: options?.refetch,
+    },
     mutationFn: async (data: Data) => {
-      const { withFileUpload, ...otherOptions } = options ?? {};
-
       try {
-        const response = await http.post<APIResponseType<Response>, Data>(
-          isFunction(url)
-            ? ((url as (params: Data) => string)(data) as string)
-            : (url as string),
-          data,
-          {
-            ...otherOptions,
-            headers: {
-              ...(withFileUpload ? { "Content-Type": "multipart/form-data" } : {}),
-            },
-          },
-        );
+        const response = await http.post<APIResponseType<Response>, Data>(_url, data, {
+          ...otherOptions,
+          headers: withFileUpload ? { "Content-Type": "multipart/form-data" } : {},
+        });
 
-        return response.data; // explicitly return the correct response data
+        return response.data;
       } catch (error) {
         if (error instanceof Error) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          throw (error as any).response?.data || error.message; // ensure errors are thrown properly
+          throw (error as any).response?.data || error.message;
         }
 
         throw error;
@@ -189,8 +293,16 @@ export const usePost = <
     },
   });
 
+  useLongRequestNotifier({
+    key: _key,
+    isPending: isPending,
+    enable: options?.notifyOnLongRequest,
+    threshold: options?.longRequestThreshold,
+    message: options?.longRequestMessage,
+  });
+
   const cancel = async () => {
-    return await queryClient.cancelQueries({ queryKey: [url] });
+    return await queryClient.cancelQueries({ queryKey: _key });
   };
 
   const mutate = async (data: Data) => {
@@ -198,46 +310,57 @@ export const usePost = <
     return qMutate(data);
   };
 
-  return { ...query, mutate, reset, cancel, isLoading: isPending };
+  return { ...query, mutate, cancel, isLoading: isPending };
 };
 
 export const usePut = <
   Response = unknown,
   Data = unknown,
   Error = RequestError,
-  URLType = ((params: Data) => string) | URLsType,
+  URLType = URLsType,
 >(
   url: URLType,
-  options?: PutOptionsType,
+  options?: PutOptionsType<APIResponseType<Response>, Error, Data>,
 ) => {
+  const _url = isFunction(url) ? url() : url;
+  const _key: QueryKey = useMemo(() => [_url], [_url]);
+  const queryClient = useQueryClient();
+  const { withFileUpload, onSuccess, onError, onSettled, ...otherOptions } =
+    options ?? {};
+
   const {
     mutateAsync: qMutate,
-    reset,
     isPending,
     ...query
   } = useMutation<APIResponseType<Response>, Error, Data>({
-    mutationKey: [url],
+    mutationKey: _key,
+    onSuccess: async (data, variables) => {
+      if (isFunction(onSuccess)) {
+        await onSuccess(data, variables);
+      }
+
+      if (options?.refetch) {
+        await queryClient.refetchQueries({
+          predicate: (query) => !!options.refetch?.includes(String(query.queryKey[0])),
+        });
+      }
+    },
+    onError,
+    onSettled,
+    meta: {
+      invalidateQueryKey: options?.refetch,
+    },
     mutationFn: async (data: Data) => {
-      const { withFileUpload, ...otherOptions } = options ?? {};
-
       try {
-        const response = await http.put<APIResponseType<Response>, Data>(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          isFunction(url) ? (url as any)(data) : url,
-          data,
-          {
-            ...otherOptions,
-            headers: {
-              ...(withFileUpload ? { "Content-Type": "multipart/form-data" } : {}),
-            },
-          },
-        );
+        const response = await http.put<APIResponseType<Response>, Data>(_url, data, {
+          ...otherOptions,
+          headers: withFileUpload ? { "Content-Type": "multipart/form-data" } : {},
+        });
 
-        return response.data; // explicitly return the correct response data
+        return response.data;
       } catch (error) {
         if (error instanceof Error) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          throw (error as any).response?.data || error.message; // ensure errors are thrown properly
+          throw (error as any).response?.data || error.message;
         }
 
         throw error;
@@ -245,8 +368,16 @@ export const usePut = <
     },
   });
 
+  useLongRequestNotifier({
+    key: _key,
+    isPending: isPending,
+    enable: options?.notifyOnLongRequest,
+    threshold: options?.longRequestThreshold,
+    message: options?.longRequestMessage,
+  });
+
   const cancel = async () => {
-    return await queryClient.cancelQueries({ queryKey: [url] });
+    return await queryClient.cancelQueries({ queryKey: _key });
   };
 
   const mutate = async (data: Data) => {
@@ -254,47 +385,58 @@ export const usePut = <
     return qMutate(data);
   };
 
-  return { ...query, mutate, reset, cancel, isLoading: isPending };
+  return { ...query, mutate, cancel, isLoading: isPending };
 };
 
 export const usePatch = <
   Response = unknown,
   Data = unknown,
   Error = RequestError,
-  URLType = ((params: Data) => string) | URLsType,
+  URLType = URLsType,
 >(
   url: URLType,
-  options?: PatchOptionsType,
+  options?: PatchOptionsType<APIResponseType<Response>, Error, Data>,
 ) => {
+  const _url = isFunction(url) ? url() : url;
+  const _key: QueryKey = useMemo(() => [_url], [_url]);
+  const queryClient = useQueryClient();
+  const { withFileUpload, onSuccess, onError, onSettled, ...otherOptions } =
+    options ?? {};
+
   const {
     mutateAsync: qMutate,
     data,
-    reset,
     isPending,
     ...query
   } = useMutation<APIResponseType<Response>, Error, Data>({
-    mutationKey: [url],
+    mutationKey: _key,
+    onSuccess: async (data, variables) => {
+      if (isFunction(onSuccess)) {
+        await onSuccess(data, variables);
+      }
+
+      if (options?.refetch) {
+        await queryClient.refetchQueries({
+          predicate: (query) => !!options.refetch?.includes(String(query.queryKey[0])),
+        });
+      }
+    },
+    onError,
+    onSettled,
+    meta: {
+      invalidateQueryKey: options?.refetch,
+    },
     mutationFn: async (data: Data) => {
-      const { withFileUpload, ...otherOptions } = options ?? {};
-
       try {
-        const response = await http.patch<APIResponseType<Response>, Data>(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          isFunction(url) ? (url as any)(data) : url,
-          data,
-          {
-            ...otherOptions,
-            headers: {
-              ...(withFileUpload ? { "Content-Type": "multipart/form-data" } : {}),
-            },
-          },
-        );
+        const response = await http.patch<APIResponseType<Response>, Data>(_url, data, {
+          ...otherOptions,
+          headers: withFileUpload ? { "Content-Type": "multipart/form-data" } : {},
+        });
 
-        return response.data; // explicitly return the correct response data
+        return response.data;
       } catch (error) {
         if (error instanceof Error) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          throw (error as any).response?.data || error.message; // ensure errors are thrown properly
+          throw (error as any).response?.data || error.message;
         }
 
         throw error;
@@ -302,8 +444,16 @@ export const usePatch = <
     },
   });
 
+  useLongRequestNotifier({
+    key: _key,
+    isPending: isPending,
+    enable: options?.notifyOnLongRequest,
+    threshold: options?.longRequestThreshold,
+    message: options?.longRequestMessage,
+  });
+
   const cancel = async () => {
-    return await queryClient.cancelQueries({ queryKey: [url] });
+    return await queryClient.cancelQueries({ queryKey: _key });
   };
 
   const mutate = async (data: Data) => {
@@ -311,37 +461,55 @@ export const usePatch = <
     return qMutate(data);
   };
 
-  return { ...query, data, mutate, reset, cancel, isLoading: isPending };
+  return { ...query, data, mutate, cancel, isLoading: isPending };
 };
 
 export const useDelete = <
   Response = unknown,
-  Data = unknown,
+  Param = unknown,
   Error = RequestError,
-  URLType = ((params: Data) => string) | URLsType,
+  URLType = URLsType,
 >(
   url: URLType,
-  options?: Omit<GetFetcherType, "enable">,
+  options?: DeleteOptionsType<APIResponseType<Response>, Error, Param>,
 ) => {
+  const _key: QueryKey = useMemo(() => [url], [url]);
+  const queryClient = useQueryClient();
+  const { onSuccess, onError, onSettled, ...otherOptions } = options ?? {};
+
   const {
     mutateAsync: qMutate,
-    reset,
     isPending,
     ...query
-  } = useMutation<APIResponseType<Response>, Error, Data>({
-    mutationKey: [url],
-    mutationFn: async (data: Data) => {
+  } = useMutation<APIResponseType<Response>, Error, Param>({
+    mutationKey: _key,
+    onSuccess: async (data, variables) => {
+      if (isFunction(onSuccess)) {
+        await onSuccess(data, variables);
+      }
+
+      if (options?.refetch) {
+        await queryClient.refetchQueries({
+          predicate: (query) => !!options.refetch?.includes(String(query.queryKey[0])),
+        });
+      }
+    },
+    onError,
+    onSettled,
+    meta: {
+      invalidateQueryKey: options?.refetch,
+    },
+    mutationFn: async (param) => {
+      const _url = isFunction(url) ? url(param) : url;
+
       try {
-        const response = await http.delete<APIResponseType<Response>>(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          isFunction(url) ? (url as any)(data) : url,
-          { ...options },
-        );
-        return response.data; // explicitly return the correct response data
+        const response = await http.delete<APIResponseType<Response>>(_url, {
+          ...otherOptions,
+        });
+        return response.data;
       } catch (error) {
         if (error instanceof Error) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          throw (error as any).response?.data || error.message; // ensure errors are thrown properly
+          throw (error as any).response?.data || error.message;
         }
 
         throw error;
@@ -349,30 +517,33 @@ export const useDelete = <
     },
   });
 
+  useLongRequestNotifier({
+    key: _key,
+    isPending: isPending,
+    enable: options?.notifyOnLongRequest,
+    threshold: options?.longRequestThreshold,
+    message: options?.longRequestMessage,
+  });
+
   const cancel = async () => {
-    return await queryClient.cancelQueries({ queryKey: [url], exact: true });
+    return await queryClient.cancelQueries({ queryKey: _key });
   };
 
-  const mutate = async (data: Data) => {
+  const mutate = async (data: Parameters<typeof qMutate>[0]) => {
     return qMutate(data);
   };
 
-  return { ...query, mutate, reset, cancel, isLoading: isPending };
-};
-
-export type GetFileOptions = {
-  /** if false, query will not automatically run until you call mutate() */
-  enable?: boolean;
-  /** any other flags you want to pass through */
-  silent?: boolean;
+  return { ...query, mutate, cancel, isLoading: isPending };
 };
 
 export const useGetFile = (
   key: QueryKey,
   url: URLsType,
-  options: GetFileOptions = {},
+  options: GetFileOptionsType = {},
 ) => {
-  const _key = useMemo(() => [...key, url], [key, url]);
+  const _url = isFunction(url) ? url({}) : url;
+  const _key: QueryKey = useMemo(() => [...key, _url], [key, _url]);
+  const queryClient = useQueryClient();
 
   const {
     data: blob,
@@ -382,15 +553,14 @@ export const useGetFile = (
   } = useQuery<Blob, unknown>({
     queryKey: _key,
     queryFn: async ({ signal }) => {
-      const finalUrl = isFunction(url) ? url() : url;
-      const response = await http.get<Blob>(finalUrl, {
+      const response = await http.get<Blob>(_url, {
+        raw: true,
         responseType: "blob",
         signal,
       });
       return response.data;
     },
-    enabled: options.enable === false ? false : true,
-    // we don’t need cache‐staleness handling here
+    enabled: options?.enable !== false,
   });
 
   const mutate = async () => {
@@ -398,8 +568,16 @@ export const useGetFile = (
     return result.data!;
   };
 
+  useLongRequestNotifier({
+    key: _key,
+    isPending: isFetching,
+    enable: options?.notifyOnLongRequest,
+    threshold: options?.longRequestThreshold,
+    message: options?.longRequestMessage,
+  });
+
   const cancel = async () => {
-    await queryClient.cancelQueries({ queryKey: _key, exact: true });
+    await queryClient.cancelQueries({ queryKey: _key });
   };
 
   return {
@@ -420,18 +598,38 @@ export const usePostFile = <
   Response = unknown,
   Data = unknown,
   Error = RequestError,
-  URLType = ((params: Data) => string) | URLsType,
+  URLType = URLsType,
 >(
   url: URLType,
-  options?: Omit<GetFetcherType, "enable">,
+  options?: Omit<PostOptionsType, "withFileUpload">,
 ) => {
+  const _url = isFunction(url) ? url() : url;
+  const _key: QueryKey = useMemo(() => [_url], [_url]);
+  const queryClient = useQueryClient();
+  const { onSuccess, onError, onSettled, ...otherOptions } = options ?? {};
+
   const {
     mutateAsync: qMutate,
-    reset,
     isPending,
     ...query
   } = useMutation<APIResponseType<Response>, Error, Data>({
-    mutationKey: [url],
+    mutationKey: _key,
+    onSuccess: async (data, variables) => {
+      if (isFunction(onSuccess)) {
+        await onSuccess(data, variables);
+      }
+
+      if (options?.refetch) {
+        await queryClient.refetchQueries({
+          predicate: (query) => !!options.refetch?.includes(String(query.queryKey[0])),
+        });
+      }
+    },
+    onError,
+    onSettled,
+    meta: {
+      invalidateQueryKey: options?.refetch,
+    },
     mutationFn: async (data: Data) => {
       try {
         const formData = new FormData();
@@ -440,21 +638,18 @@ export const usePostFile = <
         });
 
         const response = await http.post<APIResponseType<Response>, FormData>(
-          isFunction(url)
-            ? ((url as (params: Data) => string)(data) as string)
-            : (url as string),
+          _url,
           formData,
           {
-            ...options,
+            ...otherOptions,
             headers: { "Content-Type": "multipart/form-data" },
           },
         );
-        console.log("useHttp()", data);
-        return response.data; // explicitly return the correct response data
+
+        return response.data;
       } catch (error) {
         if (error instanceof Error) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          throw (error as any).response?.data || error.message; // ensure errors are thrown properly
+          throw (error as any).response?.data || error.message;
         }
 
         throw error;
@@ -462,46 +657,56 @@ export const usePostFile = <
     },
   });
 
+  useLongRequestNotifier({
+    key: _key,
+    isPending: isPending,
+    enable: options?.notifyOnLongRequest,
+    threshold: options?.longRequestThreshold,
+    message: options?.longRequestMessage,
+  });
+
   const cancel = async () => {
-    return await queryClient.cancelQueries({ queryKey: [url], exact: true });
+    return await queryClient.cancelQueries({ queryKey: _key });
   };
 
   const mutate = async (data: Data) => {
     return qMutate(data);
   };
 
-  return { ...query, mutate, reset, cancel, isLoading: isPending };
+  return { ...query, mutate, cancel, isLoading: isPending };
 };
 
 export const useGetFileMutation = <
-  Data = unknown,
+  Param = unknown,
   Error = RequestError,
-  URLType = ((params: Data) => string) | URLsType,
+  URLType = URLsType,
 >(
   url: URLType,
+  options: GetFileOptionsType = {},
 ) => {
+  const _key: QueryKey = useMemo(() => [url], [url]);
+  const queryClient = useQueryClient();
+
   const {
     mutateAsync: qMutate,
-    reset,
     isPending,
     ...query
-  } = useMutation<Blob, Error, Data>({
-    mutationKey: [url],
-    mutationFn: async (data: Data) => {
+  } = useMutation<Blob, Error, Param>({
+    mutationKey: _key,
+    mutationFn: async (param) => {
+      const _url = isFunction(url) ? url(param) : url;
+
       try {
-        const response = await http.get<Blob>(
-          isFunction(url) ? (url(data) as string) : (url as string),
-          {
-            raw: true,
-            responseType: "blob",
-          },
-        );
+        const response = await http.get<Blob>(_url, {
+          ...options,
+          raw: true,
+          responseType: "blob",
+        });
 
         return response.data as Blob;
       } catch (error) {
         if (error instanceof Error) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          throw (error as any).response?.data || error.message; // ensure errors are thrown properly
+          throw (error as any).response?.data || error.message;
         }
 
         throw error;
@@ -509,48 +714,71 @@ export const useGetFileMutation = <
     },
   });
 
+  useLongRequestNotifier({
+    key: _key,
+    isPending: isPending,
+    enable: options?.notifyOnLongRequest,
+    threshold: options?.longRequestThreshold,
+    message: options?.longRequestMessage,
+  });
+
   const cancel = async () => {
-    return await queryClient.cancelQueries({ queryKey: [url], exact: true });
+    return await queryClient.cancelQueries({ queryKey: _key });
   };
 
-  const mutate = async (data: Data) => {
+  const mutate = async (data: Parameters<typeof qMutate>[0]) => {
     return qMutate(data);
   };
 
-  return { ...query, mutate, reset, cancel, isLoading: isPending };
+  return { ...query, mutate, cancel, isLoading: isPending };
 };
 
 export const usePostDownloadFile = <
   Data = unknown,
   Error = RequestError,
-  URLType = ((params: Data) => string) | URLsType,
+  URLType = URLsType,
 >(
   url: URLType,
+  options?: PostOptionsType<Blob, Error, Data>,
 ) => {
+  const _url = isFunction(url) ? url() : url;
+  const _key: QueryKey = useMemo(() => [_url], [_url]);
+  const queryClient = useQueryClient();
+  const { onSuccess, onError, onSettled, ...otherOptions } = options ?? {};
+
   const {
     mutateAsync: qMutate,
-    reset,
     isPending,
     ...query
   } = useMutation<Blob, Error, Data>({
-    mutationKey: [url],
+    mutationKey: _key,
+    onSuccess: async (data, variables) => {
+      if (isFunction(onSuccess)) {
+        await onSuccess(data, variables);
+      }
+
+      if (options?.refetch) {
+        await queryClient.refetchQueries({
+          predicate: (query) => !!options.refetch?.includes(String(query.queryKey[0])),
+        });
+      }
+    },
+    onError,
+    onSettled,
+    meta: {
+      invalidateQueryKey: options?.refetch,
+    },
     mutationFn: async (data: Data) => {
       try {
-        const response = await http.post<Blob, Data>(
-          isFunction(url)
-            ? ((url as (params: Data) => string)(data) as string)
-            : (url as string),
-          data,
-          {
-            responseType: "blob",
-          },
-        );
+        const response = await http.post<Blob, Data>(_url, data, {
+          ...otherOptions,
+          responseType: "blob",
+        });
 
-        return response.data; // explicitly return the correct response data
+        return response.data;
       } catch (error) {
         if (error instanceof Error) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          throw (error as any).response?.data || error.message; // ensure errors are thrown properly
+          throw (error as any).response?.data || error.message;
         }
 
         throw error;
@@ -558,8 +786,16 @@ export const usePostDownloadFile = <
     },
   });
 
+  useLongRequestNotifier({
+    key: _key,
+    isPending: isPending,
+    enable: options?.notifyOnLongRequest,
+    threshold: options?.longRequestThreshold,
+    message: options?.longRequestMessage,
+  });
+
   const cancel = async () => {
-    return await queryClient.cancelQueries({ queryKey: [url] });
+    return await queryClient.cancelQueries({ queryKey: _key });
   };
 
   const mutate = async (data: Data) => {
@@ -567,5 +803,5 @@ export const usePostDownloadFile = <
     return qMutate(data);
   };
 
-  return { ...query, mutate, reset, cancel, isLoading: isPending };
+  return { ...query, mutate, cancel, isLoading: isPending };
 };
