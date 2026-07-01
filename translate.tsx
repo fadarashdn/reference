@@ -143,7 +143,31 @@ SETTLE
 CONVERT
 RELEASE
 CREATION
+DONE
 ```
+
+const ACTION_TRANSLATION_KEY: Record<EntityActionType, TranslateKeys> = {
+  DELETE: "brdpManagement.actionDelete", // حذف
+  ADD: "brdpManagement.actionAddition", // افزودن
+  EDIT: "brdpManagement.actionEdit", // ویرایش
+  DEACTIVATE: "brdpManagement.deActivation", // غیرفعال سازی
+  ACTIVATE: "brdpManagement.activation", // فعال سازی
+  APPROVE: "brdpManagement.actionApprove", // تأیید
+  REJECT: "brdpManagement.actionReject", // رد
+  ADDED: "brdpManagement.actionAppended", //افزوده
+  REGISTER: "brdpManagement.actionRegister", // ثبت
+  COMPLETE: "brdpManagement.actionComplete", //تکمیل
+  FINALIZE: "brdpManagement.actionFinalize", // نهایی سازی
+  RETURN: "brdpManagement.actionReturn", // برگشت
+  RECEIVE: "brdpManagement.actionReceive", //دریافت
+  REQUEST: "brdpManagement.sendRequest", // ارسال درخواست
+  PAY: "brdpManagement.actionPay", // پرداخت
+  SETTLE: "brdpManagement.actionSettle", // تسویه
+  CONVERT: "brdpManagement.actionConvert", // تبدیل
+  RELEASE: "brdpManagement.actionRelease", // آزادسازی
+  CREATION: "brdpManagement.actionCreation", //تشکیل
+  DONE: "brdpManagement.actionDone", //انجام
+};
 
 If the action doesn't exist, use `actionName`.
 
