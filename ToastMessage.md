@@ -6,6 +6,8 @@ Steps: **Find** the `<Translate>` → **Classify** the action → **Convert** us
 
 > **Golden rule, applies everywhere below (`entity`, `identifiers[].title`, `actionName`, etc.):** never invent Persian text or a key name. Search the existing i18n keys first — check `ssm-flat.json` (or the relevant flat json for that module) plus `sso.*BusinessTitle`-style keys — for one whose Persian text matches what's needed. If nothing matches, **stop and tell the user**: *"No existing message key for '<subject>' — please add one (e.g. `ssm.xyz`) before I convert this."* Do not fabricate.
 
+> **Output format:** just give the converted `<ToastMessage />`/`<ActionConfirmMessage />` code — no extra explanation, no restating the steps. If a needed key doesn't exist, only add the one-line flag above. Always end with the **rendered final Persian message(s)** the user will actually see (every state — per `actionType`, per identifier, etc.) — this is the most important part, never skip it.
+
 ---
 
 ## 1. Strings vs JSX
