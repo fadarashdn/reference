@@ -4,6 +4,8 @@ Converts legacy `<Translate tKey="..." params={{...}} />` toast/confirm text int
 
 Steps: **Find** the `<Translate>` → **Classify** the action → **Convert** using `entity` + `identifiers` → **Fix imports** (swap `Translate`→`ToastMessage` in `@brdp/engine`, drop `Translate` only if unused elsewhere in file) → **Clean up** (dead `Typography` imports, leftover `params` logic, stray commented translations).
 
+> **Golden rule, applies everywhere below (`entity`, `identifiers[].title`, `actionName`, etc.):** never invent Persian text or a key name. Search the existing i18n keys first — check `ssm-flat.json` (or the relevant flat json for that module) plus `sso.*BusinessTitle`-style keys — for one whose Persian text matches what's needed. If nothing matches, **stop and tell the user**: *"No existing message key for '<subject>' — please add one (e.g. `ssm.xyz`) before I convert this."* Do not fabricate.
+
 ---
 
 ## 1. Strings vs JSX
@@ -77,9 +79,8 @@ This is the step most likely to go wrong, so be deliberate:
 
 1. **If the old `params` included `business` or `item`** → that string is the entity, directly.
 2. **If `params` had no `business`/`item`** (e.g. only `{ actionName, id }`, or `{ name }`), the entity was implicit in the **translation key's own subject**, not in the params. Infer it from the key name (e.g. `ssm.succeedCreateAction` → subject is "action" → look for an existing entity-title key like `ssm.action`).
-3. **Never invent new message text for the entity.** Search the existing i18n keys (e.g. `ssm-flat.json`, `sso.*BusinessTitle` keys) for a key whose Persian text matches the inferred subject.
-4. **If no matching key exists** — stop and tell the user: *"No existing message key represents entity '<subject>' — please add one (e.g. `ssm.xyz`) before I convert this."* Do not fabricate a key or guess translated text.
-5. **Everything else in `params`** (the actual data values — name, id, code, etc.) becomes `identifiers`, one entry per param: pick a sensible existing `title` key for each (e.g. `id` → `ssm.identifier`), `value` = the original param expression, unchanged.
+3. Apply the **golden rule** above to resolve the entity key — search first, ask if missing, never invent.
+4. **Everything else in `params`** (the actual data values — name, id, code, etc.) becomes `identifiers`, one entry per param: pick a sensible existing `title` key for each (e.g. `id` → `ssm.identifier`), `value` = the original param expression, unchanged.
 
 ### Worked example — no `business`/`item` param
 
