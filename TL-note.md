@@ -533,3 +533,46 @@ const MySearchPage = () => {
   );
 };
 ```
+
+
+# 📝 Note: Readonly Confirm/Cancel Modal — Use showAppModal's onOk/onCancel
+
+## ✅ CORRECT Pattern for Readonly Confirm Modal
+
+When a modal only needs to **show readonly content and ask the user to confirm or cancel** (no form submission inside), don't build custom footer buttons or wire a form's `onSubmit`/`onReset`. Use `showAppModal`'s own `onOk` / `onCancel` options instead, and set `closable: false` so the X button doesn't offer a third, unhandled way out.
+
+```typescriptreact
+// ✅ CORRECT
+const handleOpenConfirmModal = (result: APIResponseType<IDebtorTransaction>) => {
+  hideAllModals();
+  showAppModal({
+    id: MODAL_IDS.CONFIRM,
+    title: messages("pol.confirmTimeoutMessage"),
+    icon: <IconsList.InfoCircleIcon />,
+    element: <Typography text={messages("pol.confirmTimeoutQuestion")} />,
+    options: {
+      closable: false,
+      cancelText: messages("brdpManagement.cancel"),
+      onCancel: () => handleCancelConfirm(result),
+      okText: messages("brdpManagement.confirm"),
+      onOk: () => handleConfirm(result),
+      size: "small",
+    },
+  });
+};
+```
+
+## Rule:
+
+- `element` can be any readonly display — most often just a `<Typography text={...} />`, but can be any component that only *renders* info (no inputs, no `onSubmit`).
+- Confirm action → `options.onOk` + `okText`
+- Cancel action → `options.onCancel` + `cancelText`
+- `closable: false` — prevents the X button from being a silent, unhandled exit path
+- `size: "small"` is the standard size for this kind of confirm dialog
+
+## When to use this vs a form modal:
+
+| Modal Content | Confirm/Cancel Wiring |
+|----------------|------------------------|
+| **Readonly info (Typography, summary, etc.)** | `options.onOk` / `options.onCancel` on `showAppModal` |
+| **Editable form (create/edit)** | `FormGenerator`'s `onSubmit` / `onReset` (see Modal Reset Button Behavior note) |
